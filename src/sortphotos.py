@@ -282,7 +282,10 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
 
     else:
         args += ['-time:all']
-
+        args += ['-EXIF:Model']
+        args += ['-Composite:ImageSize']
+        args += ['-Composite:GPSAltitude']
+        args += ['-Composite:GPSPosition']
 
     if recursive:
         args += ['-r']
@@ -344,26 +347,57 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         # early morning photos can be grouped with previous day (depending on user setting)
         date = check_for_early_morning_photos(date, day_begins)
 
+        # # create folder structure
+        # dir_structure = date.strftime(sort_format)
+        # dirs = dir_structure.split('/')
+        # dest_file = dest_dir
+        # for thedir in dirs:
+        #     dest_file = os.path.join(dest_file, thedir)
+        #     if not os.path.exists(dest_file):
+        #         os.makedirs(dest_file)
 
-        # create folder structure
-        dir_structure = date.strftime(sort_format)
-        dirs = dir_structure.split('/')
-        dest_file = dest_dir
-        for thedir in dirs:
-            dest_file = os.path.join(dest_file, thedir)
-            if not os.path.exists(dest_file):
-                os.makedirs(dest_file)
+        # # rename file if necessary
+        # filename = os.path.basename(src_file)
 
-        # rename file if necessary
-        filename = os.path.basename(src_file)
-
-        if rename_format is not None:
-            _, ext = os.path.splitext(filename)
-            filename = date.strftime(rename_format) + ext
+        # if rename_format is not None:
+        #     _, ext = os.path.splitext(filename)
+        #     filename = date.strftime(rename_format) + ext
 
         # setup destination file
-        dest_file = os.path.join(dest_file, filename)
+        # dest_file = os.path.join(dest_file, filename)
+        dest_file = os.path.join(dest_dir, src_file)
         root, ext = os.path.splitext(dest_file)
+
+        date = date.strftime('%Y%m%d_%H%M%S')
+        extra_metadata = [date]
+        try:
+            image_size = data['Composite:ImageSize']
+            extra_metadata.append(image_size)
+        except KeyError:
+            pass
+        try:
+            model = data['EXIF:Model'].lower().replace('/', '')\
+                    .replace(' ', '_')
+            extra_metadata.append(model)
+        except KeyError:
+            pass
+        try:
+            gps = data['Composite:GPSPosition'].replace('deg', 'd')\
+                  .replace("'", 'm').replace('"', 's').replace(',', '_')\
+                  .replace(' ', '')
+            extra_metadata.append(gps)
+        except KeyError:
+            pass
+        try:
+            altitude = 'alt'+''.join(data['Composite:GPSAltitude'].split(' ', 2)[:-1])
+            extra_metadata.append(altitude)
+        except KeyError:
+            pass
+
+        extra_metadata = '_'.join(extra_metadata)
+
+        filename = '{}{}'.format(extra_metadata, ext)
+        dest_file = os.path.join(dest_dir, filename)
 
         if verbose:
             name = 'Destination '
@@ -396,7 +430,9 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
                     break
 
                 else:  # name is same, but file is different
-                    dest_file = root + '_' + str(append) + ext
+                    root, ext = os.path.splitext(filename)
+                    dest_file = root + '--' + str(append) + ext
+                    dest_file = os.path.join(dest_dir, dest_file)
                     append += 1
                     if verbose:
                         print('Same name already exists...renaming to: ' + dest_file)
@@ -410,7 +446,6 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
             test_file_dict[dest_file] = src_file
 
         else:
-
             if copy_files:
                 if fileIsIdentical:
                     continue  # if file is same, we just ignore it (for copy option)
